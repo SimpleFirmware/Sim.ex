@@ -17,6 +17,7 @@ defmodule BigMarsh.V1Simulator do
     like path diverge based on object avoidance.
 
   """
+  alias ExUnit.Case
   use GenServer
 
   @server_name :drone_simulator
@@ -95,7 +96,6 @@ defmodule BigMarsh.V1Simulator do
             drone_type_name: drone_type_name,
             drone_current_lon: drone_current_lon,
             drone_current_lat: drone_current_lat,
-            drone_current_percentage: drone_current_percentage,
             target_lon: target_lon,
             target_lat: target_lat,
             target_interval_secs: target_interval_secs,
@@ -131,10 +131,10 @@ defmodule BigMarsh.V1Simulator do
   end
 
   defp calulate_points(
+    points,
     drone_type_name,
     drone_current_lon,
     drone_current_lat,
-    drone_current_percentage,
     target_lon,
     target_lat,
     target_interval_secs,
@@ -159,6 +159,28 @@ defmodule BigMarsh.V1Simulator do
       new_lat = Decimal.add(Decimal.from_float(drone_current_lat), Decimal.mult(lat_diff, percentage_traveled_per_interval))
       new_lon = Decimal.add(Decimal.from_float(drone_current_lon), Decimal.mult(lon_diff, percentage_traveled_per_interval))
 
+      new_lat_float = new_lat |> Decimal.to_float()
+      new_lon_float = new_lon |> Decimal.to_float()
+      # does the new lon/lat reside on our line?
+      # let C = new lon/lat
+      # if distance(drone_current_location, C) + distance(c, target_location) == distance(drone_current_location, target_location)
+      # it is said the new point is on the line, which makes it a valid point
+      curr_to_new = distance_between_points_in_miles(drone_current_lon, drone_current_lat, new_lon_float, new_lat_float)
+      new_to_target = distance_between_points_in_miles(target_lon, target_lat, new_lon_float, new_lat_float)
+      is_valid_point = curr_to_new + new_to_target == distance_in_miles
+      case is_valid_point do
+        true ->
+          calulate_points(
+            [{new_lon_float, new_lat_float} | points],
+            drone_type_name,new_lon_float,
+            new_lat_float,
+            target_lon,
+            target_lat,
+            target_interval_secs ,
+            state
+          )
+        false -> points
+      end
   end
 
   defp distance_in_miles_to_seconds(distance, mph) do
