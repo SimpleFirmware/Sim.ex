@@ -117,17 +117,21 @@ defmodule BigMarsh.V1Simulator do
     drone = drones |> Map.get(drone_id)
 
     # Update our current tick
-    current_tick = Map.get(drone, :curent_tick) + 1
+    current_tick = Map.get(drone, :current_tick) + 1
     drone = Map.put(drone, :current_tick, current_tick)
 
     # Get our new tick related point
     points = Map.get(drone, :points)
-    {lon, lat} = Enum.at(points, current_tick - 1)
-
-    # persist state
-    drones = drones |> Map.put(drone_id, drone)
-    state = Map.put(state, :drones, drones)
-    {:reply,{lon, lat}, state}
+    out_of_ticks = current_tick > Enum.count(points)
+    case out_of_ticks do
+      true ->
+        {:reply,:out_of_ticks, state}
+      false ->
+        {lon, lat} = Enum.at(points, current_tick - 1)
+        drones = drones |> Map.put(drone_id, drone)
+        state = Map.put(state, :drones, drones)
+        {:reply,{lon, lat}, state}
+    end
   end
 
   def handle_cast({:remove_drone, drone_id}, state) do
@@ -135,15 +139,16 @@ defmodule BigMarsh.V1Simulator do
     {:noreply, state}
   end
 
-  #
-  #   {-87.61318237235228, 41.685539475585806},
- # {-87.61801576186382, 41.68547730272255},
+  # Little test...
+  # {:ok, pid} = BigMarsh.V1Simulator.start_link([])
+  # GenServer.cast(pid, {:add_drone_type, "test", 30.0, 10.0, 2.0, 5.0})
+  # GenServer.cast(pid, {:add_drone, 1, "test", -87.64218256846847, 41.68516340084044, 10.0, -87.61144234984356, 41.685561808243065, 30.0})
+  #{-87.61318237235228, 41.685539475585806},
+  #{-87.61801576186382, 41.68547730272255},
   #{-87.62284914201899, 41.68541492735379},
   #{-87.62768251278743, 41.685352349480354},
   #{-87.63251587413875, 41.68528956910309},
- # {-87.63734922604256, 41.68522658622284}
-  #
-  #
+  #{-87.63734922604256, 41.68522658622284}
   defp calulate_points(
     points,
     drone_type_name,
@@ -174,8 +179,6 @@ defmodule BigMarsh.V1Simulator do
           target_lon,target_lat,
           Decimal.to_float(percentage_traveled_per_interval)/100
         )
-
-
       new_lat_float = new_lat
       new_lon_float = new_lon
       # does the new lon/lat reside on our line?
