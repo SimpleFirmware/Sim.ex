@@ -1,0 +1,6 @@
+%{
+  "decimal": {:hex, :decimal, "2.2.0", "df3d06bb9517e302b1bd265c1e7f16cda51547ad9d99892049340841f3e15836", [:mix], [], "hexpm", "af8daf87384b51b7e611fb1a1f2c4d4876b65ef968fa8bd3adf44cff401c7f21"},
+  "distance": {:hex, :distance, "1.1.2", "6ff3a51a2649b0dc19280ec8af5cf11f4b183318142c95deac8ba39a02a6d637", [:mix], [{:seg_seg, "~> 0.1 or ~> 1.0", [hex: :seg_seg, repo: "hexpm", optional: false]}], "hexpm", "bd1d2d3b8fbbb7c8fff04218cf54e5840ddf9069d0bed847d28907309345de76"},
+  "seg_seg": {:hex, :seg_seg, "1.0.0", "018dde9369d022ca5b57ccaa38b8a79e378883e7ec65081ed46932c79291f70c", [:mix], [{:vector, "~> 1.0", [hex: :vector, repo: "hexpm", optional: false]}], "hexpm", "19fc9008d727a3cfb1f16fc6b3d6bed110d5c4246b1879494bf0a104f422262c"},
+  "vector": {:hex, :vector, "1.1.0", "0789b5e00e9c551d8d5880acab9a8f44ed46690d083af397018bf0c7f30c1092", [:mix], [], "hexpm", "48b0a800ec88e55b12c689b09100e4c9ba41ea1befb459221c085a4e70040696"},
+}

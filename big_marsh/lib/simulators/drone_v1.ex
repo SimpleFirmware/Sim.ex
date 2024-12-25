@@ -37,6 +37,11 @@ defmodule BigMarsh.V1Simulator do
     }
   end
 
+
+  def handle_call(:state, _from, state) do
+    {:reply, state, state}
+  end
+
   def handle_cast({
     :add_drone_type,
     drone_type_name,
@@ -77,12 +82,12 @@ defmodule BigMarsh.V1Simulator do
     drone_current_percentage,
     target_lon,
     target_lat,
-    target_interval}, state) do
+    target_interval_secs}, state) do
       points = calulate_points(
+        [],
         drone_type_name,
         drone_current_lon,
         drone_current_lat,
-        drone_current_percentage,
         target_lon,
         target_lat,
         target_interval_secs,
@@ -116,7 +121,7 @@ defmodule BigMarsh.V1Simulator do
     drone = Map.put(drone, :current_tick, current_tick)
 
     # Get our new tick related point
-    points = Map.get(drone, points)
+    points = Map.get(drone, :points)
     {lon, lat} = Enum.at(points, current_tick - 1)
 
     # persist state
@@ -130,6 +135,15 @@ defmodule BigMarsh.V1Simulator do
     {:noreply, state}
   end
 
+  #
+  #   {-87.61318237235228, 41.685539475585806},
+ # {-87.61801576186382, 41.68547730272255},
+  #{-87.62284914201899, 41.68541492735379},
+  #{-87.62768251278743, 41.685352349480354},
+  #{-87.63251587413875, 41.68528956910309},
+ # {-87.63734922604256, 41.68522658622284}
+  #
+  #
   defp calulate_points(
     points,
     drone_type_name,
@@ -145,7 +159,7 @@ defmodule BigMarsh.V1Simulator do
         Map.get(drone_type_name) |>
         Map.get(:maximum_speed)
       distance_in_miles = distance_between_points_in_miles(drone_current_lon, drone_current_lat, target_lon, target_lat)
-      seconds_to_go_distance = distance_in_miles_to_seconds(distance, mph)
+      seconds_to_go_distance = distance_in_miles_to_seconds(distance_in_miles, mph)
       miles_per_second = Decimal.div(
         Decimal.from_float(distance_in_miles),
         seconds_to_go_distance)
@@ -153,21 +167,30 @@ defmodule BigMarsh.V1Simulator do
       percentage_traveled_per_interval = Decimal.mult(Decimal.div(miles_per_interval, Decimal.from_float(distance_in_miles)),100)
       #line interpolation
 
-      lon_diff = Decimal.sub(Decimal.from_float(drone_current_lon), Decimal.from_float(target_lon))
-      lat_diff = Decimal.sub(Decimal.from_float(drone_current_lat), Decimal.from_float(target_lat))
+      {new_lon, new_lat} =
+        calculate_new_intermediate_point(
+          drone_current_lon,
+          drone_current_lat,
+          target_lon,target_lat,
+          Decimal.to_float(percentage_traveled_per_interval)/100
+        )
 
-      new_lat = Decimal.add(Decimal.from_float(drone_current_lat), Decimal.mult(lat_diff, percentage_traveled_per_interval))
-      new_lon = Decimal.add(Decimal.from_float(drone_current_lon), Decimal.mult(lon_diff, percentage_traveled_per_interval))
 
-      new_lat_float = new_lat |> Decimal.to_float()
-      new_lon_float = new_lon |> Decimal.to_float()
+      new_lat_float = new_lat
+      new_lon_float = new_lon
       # does the new lon/lat reside on our line?
       # let C = new lon/lat
       # if distance(drone_current_location, C) + distance(c, target_location) == distance(drone_current_location, target_location)
       # it is said the new point is on the line, which makes it a valid point
       curr_to_new = distance_between_points_in_miles(drone_current_lon, drone_current_lat, new_lon_float, new_lat_float)
       new_to_target = distance_between_points_in_miles(target_lon, target_lat, new_lon_float, new_lat_float)
-      is_valid_point = curr_to_new + new_to_target == distance_in_miles
+
+      is_valid_point =
+        Decimal.to_float(
+          Decimal.round(
+            Decimal.add(
+              Decimal.from_float(curr_to_new),
+              Decimal.from_float(new_to_target)),2)) == distance_in_miles
       case is_valid_point do
         true ->
           calulate_points(
@@ -208,5 +231,43 @@ defmodule BigMarsh.V1Simulator do
     Decimal.from_float(Distance.GreatCircle.distance({starting_lon, starting_lat}, {ending_lon, ending_lat}) * 0.000621371) |>
     Decimal.round(2)|>
     Decimal.to_float()
+  end
+
+  # Find new points along the line between where the drone is
+  # currently vs end destination.
+  defp calculate_new_intermediate_point(lon1, lat1, lon2, lat2,  percentage) do
+    lon1 = degreeToRadians(lon1)
+    lat1 = degreeToRadians(lat1)
+    lon2 = degreeToRadians(lon2)
+    lat2 = degreeToRadians(lat2)
+
+    delta_lat = lat2 - lat1;
+    delta_lng =  lon2 - lon1;
+
+    calc_a =
+      :math.sin(delta_lat / 2) * :math.sin(delta_lat / 2) +
+      :math.cos(lat1) *  :math.cos(lat2) * :math.sin(delta_lng / 2) * :math.sin(delta_lng / 2);
+    calc_b = 2 * :math.atan2(:math.sqrt(calc_a), :math.sqrt(1 - calc_a));
+
+    a = :math.sin((1 - percentage) * calc_b) / :math.sin(calc_b);
+    b = :math.sin(percentage * calc_b) / :math.sin(calc_b);
+
+    x = a * :math.cos(lat1) * :math.cos(lon1) + b * :math.cos(lat2) * :math.cos(lon2);
+    y = a * :math.cos(lat1) * :math.sin(lon1) + b * :math.cos(lat2) * :math.sin(lon2);
+    z = a * :math.sin(lat1) + b * :math.sin(lat2);
+
+    lat3 = :math.atan2(z, :math.sqrt(x * x + y * y));
+    lng3 = :math.atan2(y, x);
+    {radiansToDegrees(lng3), radiansToDegrees(lat3)}
+  end
+
+  defp degreeToRadians (degree) do
+    pi = 3.14159265359
+    degree * (pi/180)
+  end
+
+  defp radiansToDegrees(radians) do
+    pi = 3.14159265359
+    radians * (180/pi)
   end
 end
