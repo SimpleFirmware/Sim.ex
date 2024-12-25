@@ -64,6 +64,36 @@ defmodule BigMarsh.V1Simulator do
       {:noreply, state}
   end
 
+  def handle_cast({:new_location_target, drone_id, target_lon, target_lat , target_interval_secs}, state) do
+    drones = Map.get(state, :drones)
+    drone =
+      Map.get(drones, drone_id) |>
+      Map.put(:target_lon, target_lon, target_lat: target_lat)
+    drone_type_name = Map.get(drone, :drone_type_name)
+    mph =
+      Map.get(state, :drone_types) |>
+      Map.get(drone_type_name) |>
+      Map.get(:maximum_speed)
+    drone_current_lon = Map.get(drone, :drone_current_lon)
+    drone_current_lat = Map.get(drone, :drone_current_lat)
+    points = calulate_points(
+      [],
+      drone_type_name,
+      drone_current_lon,
+      drone_current_lat,
+      target_lon,
+      target_lat,
+      target_interval_secs,
+      mph
+    )
+    drone = Map.put(drone, :points, points)
+    drones = Map.put(drones, drone_id, drone)
+
+    state = Map.put(state, :drones, drones)
+    {:noreply, state}
+    {:noreply, state}
+  end
+
   # Current interval is for the calculation
   # of how much distance should be covered per
   # call of :tick_drone. It assumes that you will
@@ -83,6 +113,10 @@ defmodule BigMarsh.V1Simulator do
     target_lon,
     target_lat,
     target_interval_secs}, state) do
+      mph =
+        Map.get(state, :drone_types) |>
+        Map.get(drone_type_name) |>
+        Map.get(:maximum_speed)
       points = calulate_points(
         [],
         drone_type_name,
@@ -91,7 +125,7 @@ defmodule BigMarsh.V1Simulator do
         target_lon,
         target_lat,
         target_interval_secs,
-        state
+        mph
       )
       drones =
         Map.get(state, :drones) |>
@@ -128,6 +162,9 @@ defmodule BigMarsh.V1Simulator do
         {:reply,:out_of_ticks, state}
       false ->
         {lon, lat} = Enum.at(points, current_tick - 1)
+        drone =
+          Map.put(drone, :drone_current_lon, lon) |>
+          Map.put(:drone_current_lat, lat)
         drones = drones |> Map.put(drone_id, drone)
         state = Map.put(state, :drones, drones)
         {:reply,{lon, lat}, state}
@@ -157,12 +194,8 @@ defmodule BigMarsh.V1Simulator do
     target_lon,
     target_lat,
     target_interval_secs,
-    state
+    mph
   ) do
-      mph =
-        Map.get(state, :drone_types) |>
-        Map.get(drone_type_name) |>
-        Map.get(:maximum_speed)
       distance_in_miles = distance_between_points_in_miles(drone_current_lon, drone_current_lat, target_lon, target_lat)
       seconds_to_go_distance = distance_in_miles_to_seconds(distance_in_miles, mph)
       miles_per_second = Decimal.div(
@@ -203,7 +236,7 @@ defmodule BigMarsh.V1Simulator do
             target_lon,
             target_lat,
             target_interval_secs ,
-            state
+            mph
           )
         false -> points
       end
