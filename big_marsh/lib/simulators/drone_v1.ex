@@ -82,28 +82,41 @@ defmodule BigMarsh.V1Simulator do
       Map.put(:target_lon, target_lon) |>
       Map.put(:target_lat, target_lat) |>
       Map.put(:current_tick, 0)
-    drone_type_name = Map.get(drone, :drone_type_name)
-    mph =
-      Map.get(state, :drone_types) |>
-      Map.get(drone_type_name) |>
-      Map.get(:maximum_speed)
     drone_current_lon = Map.get(drone, :drone_current_lon)
     drone_current_lat = Map.get(drone, :drone_current_lat)
-    points = Enum.reverse(calulate_points(
-      [],
-      drone_type_name,
-      drone_current_lon,
-      drone_current_lat,
-      target_lon,
-      target_lat,
-      target_interval_secs,
-      mph
-    ))
-    drone = Map.put(drone, :points, points)
-    drones = Map.put(drones, drone_id, drone)
+    is_same_target_location =
+      drone_current_lat == target_lat and
+      drone_current_lon == target_lon
+    state = case is_same_target_location do
+      true -> state
+      false ->
+        drone_type_name = Map.get(drone, :drone_type_name)
+        mph =
+          Map.get(state, :drone_types) |>
+          Map.get(drone_type_name) |>
+          Map.get(:maximum_speed)
+        pdpm =
+          Map.get(state, :drone_types) |>
+          Map.get(drone_type_name) |>
+          Map.get(:average_percentage_drop_per_mi)
 
-    state = Map.put(state, :drones, drones)
-    {:noreply, state}
+        drone_current_percentage = Map.get(drone, :drone_current_percentage)
+        points = Enum.reverse(calulate_points(
+          [],
+          drone_type_name,
+          drone_current_lon,
+          drone_current_lat,
+          target_lon,
+          target_lat,
+          target_interval_secs,
+          mph,
+          drone_current_percentage,
+          pdpm
+        ))
+        drone = Map.put(drone, :points, points)
+        drones = Map.put(drones, drone_id, drone)
+        Map.put(state, :drones, drones)
+    end
     {:noreply, state}
   end
 
@@ -130,6 +143,10 @@ defmodule BigMarsh.V1Simulator do
         Map.get(state, :drone_types) |>
         Map.get(drone_type_name) |>
         Map.get(:maximum_speed)
+      pdpm =
+        Map.get(state, :drone_types) |>
+        Map.get(drone_type_name) |>
+        Map.get(:average_percentage_drop_per_mi)
       points = Enum.reverse(calulate_points(
         [],
         drone_type_name,
@@ -138,7 +155,9 @@ defmodule BigMarsh.V1Simulator do
         target_lon,
         target_lat,
         target_interval_secs,
-        mph
+        mph,
+        drone_current_percentage,
+        pdpm
       ))
       drones =
         Map.get(state, :drones) |>
@@ -148,6 +167,7 @@ defmodule BigMarsh.V1Simulator do
             drone_type_name: drone_type_name,
             drone_current_lon: drone_current_lon,
             drone_current_lat: drone_current_lat,
+            drone_current_percentage: drone_current_percentage,
             target_lon: target_lon,
             target_lat: target_lat,
             target_interval_secs: target_interval_secs,
@@ -174,13 +194,14 @@ defmodule BigMarsh.V1Simulator do
       true ->
         {:reply,:out_of_ticks, state}
       false ->
-        {lon, lat} = Enum.at(points, current_tick - 1)
+        {lon, lat, percentage} = Enum.at(points, current_tick - 1)
         drone =
           Map.put(drone, :drone_current_lon, lon) |>
-          Map.put(:drone_current_lat, lat)
+          Map.put(:drone_current_lat, lat) |>
+          Map.put(:drone_current_percentage, percentage)
         drones = drones |> Map.put(drone_id, drone)
         state = Map.put(state, :drones, drones)
-        {:reply,{lon, lat}, state}
+        {:reply,{lon, lat, percentage}, state}
     end
   end
 
@@ -212,7 +233,9 @@ defmodule BigMarsh.V1Simulator do
     target_lon,
     target_lat,
     target_interval_secs,
-    mph
+    mph,
+    drone_current_percentage,
+    pdpm # average percentage drop per_mile
   ) do
       distance_in_miles = distance_between_points_in_miles(drone_current_lon, drone_current_lat, target_lon, target_lat)
       seconds_to_go_distance = distance_in_miles_to_seconds(distance_in_miles, mph)
@@ -238,6 +261,7 @@ defmodule BigMarsh.V1Simulator do
       # it is said the new point is on the line, which makes it a valid point
       curr_to_new = distance_between_points_in_miles(drone_current_lon, drone_current_lat, new_lon_float, new_lat_float)
       new_to_target = distance_between_points_in_miles(target_lon, target_lat, new_lon_float, new_lat_float)
+      battery_percentage_at_point = drone_current_percentage - (distance_in_miles * pdpm)
 
       is_valid_point =
         Decimal.to_float(
@@ -248,13 +272,15 @@ defmodule BigMarsh.V1Simulator do
       case is_valid_point do
         true ->
           calulate_points(
-            [{new_lon_float, new_lat_float} | points],
+            [{new_lon_float, new_lat_float, battery_percentage_at_point} | points],
             drone_type_name,new_lon_float,
             new_lat_float,
             target_lon,
             target_lat,
             target_interval_secs ,
-            mph
+            mph,
+            battery_percentage_at_point,
+            pdpm
           )
         false ->
           # Did the target destination get added
@@ -268,7 +294,7 @@ defmodule BigMarsh.V1Simulator do
           )
           case has_target_dest do
             true -> points
-            false -> [{target_lon, target_lat} | points]
+            false -> [{target_lon, target_lat, battery_percentage_at_point} | points]
           end
       end
   end
