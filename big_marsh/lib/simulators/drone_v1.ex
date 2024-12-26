@@ -63,12 +63,25 @@ defmodule BigMarsh.V1Simulator do
       {:noreply, state}
   end
 
+  # Starting from the example listed above calulate_points
+  #GenServer.cast(pid, {:new_location_target, 1, -87.64218256846847, 41.68516340084044 , 30.0})
+  #{-87.64218256846847, 41.68516340084044}, -> 115th halsted
+  #{-87.6404425662889, 41.68518617090629},  -> Between emerald and parnell
+  #{-87.63560922044744, 41.68524928338801}, -> Between normal and parnell closer to parnell
+  #{-87.63077586513903, 41.68531219336729}, -> Between princeton and harvard
+  #{-87.62594250039405, 41.68537490084328}, -> Between wentworth and state, closer to state
+  #{-87.62110912624289, 41.68543740581512}, -> Between michigan and state, closer to michigan
+  #{-87.61627574271593, 41.685499708281995} -> Between 115th prairie and forest
+  #
+  # Read these points in reverse order(bottom to top) as they are
+  # stored in memory reversed and ticked(requested) bottom to top
   def handle_cast({:new_location_target, drone_id, target_lon, target_lat , target_interval_secs}, state) do
     drones = Map.get(state, :drones)
     drone =
       Map.get(drones, drone_id) |>
       Map.put(:target_lon, target_lon) |>
-      Map.put(:target_lat, target_lat)
+      Map.put(:target_lat, target_lat) |>
+      Map.put(:current_tick, 0)
     drone_type_name = Map.get(drone, :drone_type_name)
     mph =
       Map.get(state, :drone_types) |>
@@ -76,7 +89,7 @@ defmodule BigMarsh.V1Simulator do
       Map.get(:maximum_speed)
     drone_current_lon = Map.get(drone, :drone_current_lon)
     drone_current_lat = Map.get(drone, :drone_current_lat)
-    points = calulate_points(
+    points = Enum.reverse(calulate_points(
       [],
       drone_type_name,
       drone_current_lon,
@@ -85,7 +98,7 @@ defmodule BigMarsh.V1Simulator do
       target_lat,
       target_interval_secs,
       mph
-    )
+    ))
     drone = Map.put(drone, :points, points)
     drones = Map.put(drones, drone_id, drone)
 
@@ -117,7 +130,7 @@ defmodule BigMarsh.V1Simulator do
         Map.get(state, :drone_types) |>
         Map.get(drone_type_name) |>
         Map.get(:maximum_speed)
-      points = calulate_points(
+      points = Enum.reverse(calulate_points(
         [],
         drone_type_name,
         drone_current_lon,
@@ -126,7 +139,7 @@ defmodule BigMarsh.V1Simulator do
         target_lat,
         target_interval_secs,
         mph
-      )
+      ))
       drones =
         Map.get(state, :drones) |>
         Map.put(
@@ -187,6 +200,9 @@ defmodule BigMarsh.V1Simulator do
   #{-87.62768251278743, 41.68535234948036}, -> 115th wentworth
   #{-87.63251587413875, 41.6852895691031}, -> 115th stewart
   #{-87.63734922604256, 41.685226586222846} -> 115th wallace
+  #
+  # Read these points in reverse order(bottom to top) as they are
+  # stored in memory reversed and ticked(requested) bottom to top
 
   defp calulate_points(
     points,
@@ -218,7 +234,7 @@ defmodule BigMarsh.V1Simulator do
       new_lon_float = new_lon
       # does the new lon/lat reside on our line?
       # let C = new lon/lat
-      # if distance(drone_current_location, C) + distance(c, target_location) == distance(drone_current_location, target_location)
+      # if distance(drone_current_location, C) + distance(C, target_location) == distance(drone_current_location, target_location)
       # it is said the new point is on the line, which makes it a valid point
       curr_to_new = distance_between_points_in_miles(drone_current_lon, drone_current_lat, new_lon_float, new_lat_float)
       new_to_target = distance_between_points_in_miles(target_lon, target_lat, new_lon_float, new_lat_float)
