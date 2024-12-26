@@ -272,13 +272,6 @@ defmodule BigMarsh.V1Simulator do
 
   defp distance_between_points_in_miles(starting_lon, starting_lat, ending_lon, ending_lat) do
     # meters to miles
-    # confirmed this method actually works by cross comparing
-    # to google maps, keep in mind this is straight line distance
-    # so the distances by car calculated by google maps or any other route
-    # based distance will usually be greater. This is actually one of the
-    # selling points of air delivery, the idea that the fastest route
-    # between any two points is a straight line resulting in shorter
-    # distance required for delivery.
     Decimal.from_float(Distance.GreatCircle.distance({starting_lon, starting_lat}, {ending_lon, ending_lat}) * 0.000621371) |>
     Decimal.round(2)|>
     Decimal.to_float()
