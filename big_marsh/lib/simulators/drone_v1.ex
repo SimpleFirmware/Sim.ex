@@ -37,6 +37,74 @@ defmodule BigMarsh.V1Simulator do
     }
   end
 
+  # ---- API ----
+  def add_drone_type(
+    drone_type_name,
+    maximum_speed,
+    maximum_load_in_lbs,
+    average_percentage_drop_per_mi,
+    average_percentage_gain_per_min) do
+      GenServer.cast(
+        @server_name,
+        {
+          :add_drone_type,
+          drone_type_name,
+          maximum_speed,
+          maximum_load_in_lbs,
+          average_percentage_drop_per_mi,
+          average_percentage_gain_per_min
+        })
+  end
+
+  def add_drone(
+    drone_id,
+    drone_type_name,
+    drone_current_lon,
+    drone_current_lat,
+    drone_current_percentage,
+    target_lon,
+    target_lat,
+    target_interval_secs) do
+      GenServer.cast(
+        @server_name,
+        {
+          :add_drone,
+          drone_id,
+          drone_type_name,
+          drone_current_lon,
+          drone_current_lat,
+          drone_current_percentage,
+          target_lon,
+          target_lat,
+          target_interval_secs
+        })
+  end
+
+  def set_new_target_destination(
+    drone_id,
+    target_lon,
+    target_lat ,
+    target_interval_secs) do
+      GenServer.cast(
+        @server_name,
+        {
+          :new_location_target,
+          drone_id,
+          target_lon,
+          target_lat ,
+          target_interval_secs
+        }
+      )
+  end
+
+  def get_drone_tick(drone_id) do
+    GenServer.call(@server_name, {:tick_drone, drone_id})
+  end
+
+  def internal_state() do
+    GenServer.call(@server_name, :state)
+  end
+  # ---- API ----
   def handle_call(:state, _from, state) do
     {:reply, state, state}
   end
@@ -269,8 +337,13 @@ defmodule BigMarsh.V1Simulator do
             Decimal.add(
               Decimal.from_float(curr_to_new),
               Decimal.from_float(new_to_target)),2)) == distance_in_miles
-      case is_valid_point do
-        true ->
+      point_is_target_dest = new_lat_float == target_lat and new_lon_float == target_lon
+
+      cond do
+        # no need to calculate any further if we know we are
+        # at the target dest
+        is_valid_point and point_is_target_dest -> [{target_lon, target_lat, battery_percentage_at_point} | points]
+        is_valid_point ->
           calulate_points(
             [{new_lon_float, new_lat_float, battery_percentage_at_point} | points],
             drone_type_name,new_lon_float,
@@ -282,7 +355,7 @@ defmodule BigMarsh.V1Simulator do
             battery_percentage_at_point,
             pdpm
           )
-        false ->
+        !is_valid_point ->
           # Did the target destination get added
           # as a point? If not we need to append it
           # since obviously it will always be the last.
