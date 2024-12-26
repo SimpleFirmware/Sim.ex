@@ -37,7 +37,19 @@ defmodule BigMarsh.V1Simulator do
     }
   end
 
-  # ---- API ----
+  @doc """
+    Adds a Drone type that is used
+    for metadata of the following added
+    drones.
+
+    Returns `:ok`.
+
+  ## Examples
+
+      iex> BigMarsh.V1Simulator.add_drone_type("test", 30.0, 10.0, 2.0, 5.0)
+      :ok
+
+  """
   def add_drone_type(
     drone_type_name,
     maximum_speed,
@@ -56,6 +68,20 @@ defmodule BigMarsh.V1Simulator do
         })
   end
 
+  @doc """
+    Adds a Drone and calculates
+    its next points based on
+    the provided data. Later
+    to be gathered by get_drone_tick()
+
+    Returns `:ok`.
+
+  ## Examples
+
+      iex> BigMarsh.V1Simulator.add_drone(1, "test", -87.64218256846847, 41.68516340084044, 100.0, -87.61144234984356, 41.685561808243065, 30.0)
+      :ok
+
+  """
   def add_drone(
     drone_id,
     drone_type_name,
@@ -79,7 +105,18 @@ defmodule BigMarsh.V1Simulator do
           target_interval_secs
         })
   end
+  @doc """
+    changes the target destination of
+    a drone id and recalculates the points
+    that are to be gathered by calling get_drone_tick()
 
+    Returns `:ok`.
+
+  ## Examples
+
+    iex(8)> BigMarsh.V1Simulator.set_new_target_destination(1, -87.64218256846847, 41.68516340084044 , 30.0)
+    :ok
+  """
   def set_new_target_destination(
     drone_id,
     target_lon,
@@ -97,6 +134,18 @@ defmodule BigMarsh.V1Simulator do
       )
   end
 
+  @doc """
+      Gives you the next {lon, lat, percentage} of a drone
+      based on the defined interval.
+
+    Returns {lon, lat, percentage} when ticks are present and
+    :out_of_ticks when you are at the target destination
+
+  ## Examples
+
+    iex(8)> BigMarsh.V1Simulator.set_new_target_destination(1, -87.64218256846847, 41.68516340084044 , 30.0)
+    :ok
+  """
   def get_drone_tick(drone_id) do
     GenServer.call(@server_name, {:tick_drone, drone_id})
   end
@@ -104,7 +153,8 @@ defmodule BigMarsh.V1Simulator do
   def internal_state() do
     GenServer.call(@server_name, :state)
   end
-  # ---- API ----
+  # ---- API END----
+
   def handle_call(:state, _from, state) do
     {:reply, state, state}
   end
