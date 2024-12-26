@@ -68,7 +68,8 @@ defmodule BigMarsh.V1Simulator do
     drones = Map.get(state, :drones)
     drone =
       Map.get(drones, drone_id) |>
-      Map.put(:target_lon, target_lon, target_lat: target_lat)
+      Map.put(:target_lon, target_lon) |>
+      Map.put(:target_lat, target_lat)
     drone_type_name = Map.get(drone, :drone_type_name)
     mph =
       Map.get(state, :drone_types) |>
@@ -180,12 +181,14 @@ defmodule BigMarsh.V1Simulator do
   # {:ok, pid} = BigMarsh.V1Simulator.start_link([])
   # GenServer.cast(pid, {:add_drone_type, "test", 30.0, 10.0, 2.0, 5.0})
   # GenServer.cast(pid, {:add_drone, 1, "test", -87.64218256846847, 41.68516340084044, 10.0, -87.61144234984356, 41.685561808243065, 30.0})
-  #{-87.61318237235228, 41.685539475585806},
-  #{-87.61801576186382, 41.68547730272255},
-  #{-87.62284914201899, 41.68541492735379},
-  #{-87.62768251278743, 41.685352349480354},
-  #{-87.63251587413875, 41.68528956910309},
-  #{-87.63734922604256, 41.68522658622284}
+  #{-87.61144234984356, 41.685561808243065}, -> 115th cottage grove
+  #{-87.61318237235228, 41.685539475585806}, -> 115th king dr
+  #{-87.61801576186382, 41.68547730272256}, -> 115th indiana
+  #{-87.62284914201899, 41.6854149273538}, -> 115th state
+  #{-87.62768251278743, 41.68535234948036}, -> 115th wentworth
+  #{-87.63251587413875, 41.6852895691031}, -> 115th stewart
+  #{-87.63734922604256, 41.685226586222846} -> 115th wallace
+
   defp calulate_points(
     points,
     drone_type_name,
@@ -238,7 +241,20 @@ defmodule BigMarsh.V1Simulator do
             target_interval_secs ,
             mph
           )
-        false -> points
+        false ->
+          # Did the target destination get added
+          # as a point? If not we need to append it
+          # since obviously it will always be the last.
+          has_target_dest = Enum.any?(
+            points,
+            fn point ->
+              elem(point,0) == target_lon and
+              elem(point, 1) == target_lat end
+          )
+          case has_target_dest do
+            true -> points
+            false -> [{target_lon, target_lat} | points]
+          end
       end
   end
 
