@@ -37,7 +37,6 @@ defmodule BigMarsh.V1Simulator do
     }
   end
 
-
   def handle_call(:state, _from, state) do
     {:reply, state, state}
   end
