@@ -17,7 +17,6 @@ defmodule BigMarsh.V1Simulator do
     like path diverge based on object avoidance.
 
   """
-  alias ExUnit.Case
   use GenServer
 
   @server_name :drone_simulator
@@ -143,8 +142,8 @@ defmodule BigMarsh.V1Simulator do
 
   ## Examples
 
-    iex(8)> BigMarsh.V1Simulator.set_new_target_destination(1, -87.64218256846847, 41.68516340084044 , 30.0)
-    :ok
+    iex(8)> BigMarsh.V1Simulator.get_drone_tick(1)
+
   """
   def get_drone_tick(drone_id) do
     GenServer.call(@server_name, {:tick_drone, drone_id})
@@ -157,6 +156,37 @@ defmodule BigMarsh.V1Simulator do
 
   def handle_call(:state, _from, state) do
     {:reply, state, state}
+  end
+
+  def handle_call({:tick_drone, drone_id}, _from ,state) do
+    drones = Map.get(state, :drones)
+    drone = drones |> Map.get(drone_id)
+
+    # Update our current tick
+    current_tick = Map.get(drone, :current_tick) + 1
+    drone = Map.put(drone, :current_tick, current_tick)
+
+    # Get our new tick related point
+    points = Map.get(drone, :points)
+    out_of_ticks = current_tick > Enum.count(points)
+    case out_of_ticks do
+      true ->
+        {:reply,:out_of_ticks, state}
+      false ->
+        {lon, lat, percentage} = Enum.at(points, current_tick - 1)
+        drone =
+          Map.put(drone, :drone_current_lon, lon) |>
+          Map.put(:drone_current_lat, lat) |>
+          Map.put(:drone_current_percentage, percentage)
+        drones = drones |> Map.put(drone_id, drone)
+        state = Map.put(state, :drones, drones)
+        {:reply,{lon, lat, percentage}, state}
+    end
+  end
+
+  def handle_cast({:remove_drone, drone_id}, state) do
+    state = Map.drop(state, [drone_id])
+    {:noreply, state}
   end
 
   def handle_cast({
@@ -295,37 +325,6 @@ defmodule BigMarsh.V1Simulator do
         )
       state = Map.put(state, :drones, drones)
       {:noreply, state}
-  end
-
-  def handle_call({:tick_drone, drone_id}, _from ,state) do
-    drones = Map.get(state, :drones)
-    drone = drones |> Map.get(drone_id)
-
-    # Update our current tick
-    current_tick = Map.get(drone, :current_tick) + 1
-    drone = Map.put(drone, :current_tick, current_tick)
-
-    # Get our new tick related point
-    points = Map.get(drone, :points)
-    out_of_ticks = current_tick > Enum.count(points)
-    case out_of_ticks do
-      true ->
-        {:reply,:out_of_ticks, state}
-      false ->
-        {lon, lat, percentage} = Enum.at(points, current_tick - 1)
-        drone =
-          Map.put(drone, :drone_current_lon, lon) |>
-          Map.put(:drone_current_lat, lat) |>
-          Map.put(:drone_current_percentage, percentage)
-        drones = drones |> Map.put(drone_id, drone)
-        state = Map.put(state, :drones, drones)
-        {:reply,{lon, lat, percentage}, state}
-    end
-  end
-
-  def handle_cast({:remove_drone, drone_id}, state) do
-    state = Map.drop(state, [drone_id])
-    {:noreply, state}
   end
 
   # Little test...
