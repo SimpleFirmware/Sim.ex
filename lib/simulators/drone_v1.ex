@@ -257,7 +257,7 @@ defmodule BigMarsh.V1Simulator do
       state = Map.put(state, :drones, drones)
       {:reply, "", state}
   end
-    # Starting from the example listed above calulate_points
+  # Starting from the example listed above calulate_points
   #GenServer.call(pid, {:new_location_target, 1, -87.64218256846847, 41.68516340084044 , 30.0})
   #{-87.64218256846847, 41.68516340084044}, -> 115th halsted
   #{-87.6404425662889, 41.68518617090629},  -> Between emerald and parnell
