@@ -42,7 +42,7 @@ defmodule BigMarsh.V1Simulator do
     for metadata of the following added
     drones.
 
-    Returns `:ok`.
+    Returns `""`.
 
   ## Examples
 
@@ -56,7 +56,7 @@ defmodule BigMarsh.V1Simulator do
     maximum_load_in_lbs,
     average_percentage_drop_per_mi,
     average_percentage_gain_per_min) do
-      GenServer.cast(
+      GenServer.call(
         @server_name,
         {
           :add_drone_type,
@@ -74,7 +74,7 @@ defmodule BigMarsh.V1Simulator do
     the provided data. Later
     to be gathered by get_drone_tick()
 
-    Returns `:ok`.
+    Returns `""`.
 
   ## Examples
 
@@ -91,7 +91,7 @@ defmodule BigMarsh.V1Simulator do
     target_lon,
     target_lat,
     target_interval_secs) do
-      GenServer.cast(
+      GenServer.call(
         @server_name,
         {
           :add_drone,
@@ -110,7 +110,7 @@ defmodule BigMarsh.V1Simulator do
     a drone id and recalculates the points
     that are to be gathered by calling get_drone_tick()
 
-    Returns `:ok`.
+    Returns `""`.
 
   ## Examples
 
@@ -185,6 +185,78 @@ defmodule BigMarsh.V1Simulator do
     end
   end
 
+  # Current interval is for the calculation
+  # of how much distance should be covered per
+  # call of :tick_drone. It assumes that you will
+  # call :tick_drone in your consuming application
+  # on the same interval supplied here.
+  #
+  # To keep things simple, current interval can not be
+  # changed! You must set the simulation up again from
+  # the beginning.
+  def handle_call({
+    :add_drone,
+    drone_id,
+    drone_type_name,
+    drone_current_lon,
+    drone_current_lat,
+    drone_current_percentage,
+    target_lon,
+    target_lat,
+    target_interval_secs}, _from, state) do
+      mph =
+        Map.get(state, :drone_types) |>
+        Map.get(drone_type_name) |>
+        Map.get(:maximum_speed)
+      pdpm =
+        Map.get(state, :drone_types) |>
+        Map.get(drone_type_name) |>
+        Map.get(:average_percentage_drop_per_mi)
+      per_interval_percentage =
+        get_percentage_traveled_per_interval(
+          drone_current_lon,
+          drone_current_lat,
+          target_lon,
+          target_lat,
+          target_interval_secs,
+          mph
+        )
+      points = Enum.reverse(calulate_points(
+        [],
+        drone_type_name,
+        drone_current_lon,
+        drone_current_lat,
+        target_lon,
+        target_lat,
+        target_interval_secs,
+        mph,
+        drone_current_percentage,
+        pdpm,
+        per_interval_percentage,
+        1.0
+      ))
+
+      Logger.info("num of points: #{Enum.count(points)}")
+      IO.inspect(points)
+      drones =
+        Map.get(state, :drones) |>
+        Map.put(
+          drone_id,
+          %{
+            drone_type_name: drone_type_name,
+            drone_current_lon: drone_current_lon,
+            drone_current_lat: drone_current_lat,
+            drone_current_percentage: drone_current_percentage,
+            target_lon: target_lon,
+            target_lat: target_lat,
+            target_interval_secs: target_interval_secs,
+            current_tick: 0,
+            points: points
+          }
+        )
+      state = Map.put(state, :drones, drones)
+      {:reply, "", state}
+  end
     # Starting from the example listed above calulate_points
   #GenServer.call(pid, {:new_location_target, 1, -87.64218256846847, 41.68516340084044 , 30.0})
   #{-87.64218256846847, 41.68516340084044}, -> 115th halsted
@@ -255,18 +327,13 @@ defmodule BigMarsh.V1Simulator do
     {:reply, "", state}
   end
 
-  def handle_cast({:remove_drone, drone_id}, state) do
-    state = Map.drop(state, [drone_id])
-    {:noreply, state}
-  end
-
-  def handle_cast({
+  def handle_call({
     :add_drone_type,
     drone_type_name,
     maximum_speed,
     maximum_load_in_lbs,
     average_percentage_drop_per_mi,
-    average_percentage_gain_per_min}, state) do
+    average_percentage_gain_per_min},_from, state) do
       type_map =
         Map.get(state, :drone_types) |>
         Map.put(
@@ -279,80 +346,12 @@ defmodule BigMarsh.V1Simulator do
           }
         )
       state = Map.put(state, :drone_types, type_map)
-      {:noreply, state}
+      {:reply,"", state}
   end
 
-  # Current interval is for the calculation
-  # of how much distance should be covered per
-  # call of :tick_drone. It assumes that you will
-  # call :tick_drone in your consuming application
-  # on the same interval supplied here.
-  #
-  # To keep things simple, current interval can not be
-  # changed! You must set the simulation up again from
-  # the beginning.
-  def handle_cast({
-    :add_drone,
-    drone_id,
-    drone_type_name,
-    drone_current_lon,
-    drone_current_lat,
-    drone_current_percentage,
-    target_lon,
-    target_lat,
-    target_interval_secs}, state) do
-      mph =
-        Map.get(state, :drone_types) |>
-        Map.get(drone_type_name) |>
-        Map.get(:maximum_speed)
-      pdpm =
-        Map.get(state, :drone_types) |>
-        Map.get(drone_type_name) |>
-        Map.get(:average_percentage_drop_per_mi)
-      per_interval_percentage =
-        get_percentage_traveled_per_interval(
-          drone_current_lon,
-          drone_current_lat,
-          target_lon,
-          target_lat,
-          target_interval_secs,
-          mph
-        )
-      points = Enum.reverse(calulate_points(
-        [],
-        drone_type_name,
-        drone_current_lon,
-        drone_current_lat,
-        target_lon,
-        target_lat,
-        target_interval_secs,
-        mph,
-        drone_current_percentage,
-        pdpm,
-        per_interval_percentage,
-        1.0
-      ))
-
-      Logger.info("num of points: #{Enum.count(points)}")
-      IO.inspect(points)
-      drones =
-        Map.get(state, :drones) |>
-        Map.put(
-          drone_id,
-          %{
-            drone_type_name: drone_type_name,
-            drone_current_lon: drone_current_lon,
-            drone_current_lat: drone_current_lat,
-            drone_current_percentage: drone_current_percentage,
-            target_lon: target_lon,
-            target_lat: target_lat,
-            target_interval_secs: target_interval_secs,
-            current_tick: 0,
-            points: points
-          }
-        )
-      state = Map.put(state, :drones, drones)
-      {:noreply, state}
+  def handle_cast({:remove_drone, drone_id}, state) do
+    state = Map.drop(state, [drone_id])
+    {:noreply, state}
   end
 
   # Little test...
